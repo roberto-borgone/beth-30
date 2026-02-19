@@ -205,6 +205,55 @@ body {
   will-change: transform, opacity;
 }
 
+.soSlideshow {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+  will-change: opacity;
+}
+
+.soSlideImg {
+  position: absolute;
+  inset: -6%;
+  width: 112%;
+  height: 112%;
+  object-fit: cover;
+  opacity: 0;
+  transform: rotate(var(--r, -1.5deg)) scale(1.04);
+  filter: saturate(1.05) contrast(1.02) brightness(0.9);
+  transition: opacity 80ms linear;
+}
+
+.soSlideImg::selection {
+  background: transparent;
+}
+
+.slide--so {
+  width: min(98vw, 980px);
+}
+
+.slide--so .soS {
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Helvetica,
+    Arial;
+  font-weight: 950;
+}
+
+.slide--so .soTrail {
+  display: inline-block;
+  white-space: nowrap;
+  letter-spacing: -0.04em;
+  padding-left: 4px;
+  opacity: 0.98;
+}
+
 .slides {
   position: relative;
   z-index: 1;

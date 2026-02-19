@@ -122,9 +122,12 @@ function main() {
   const message1 = document.getElementById("message1");
   const message2 = document.getElementById("message2");
   const wipe1 = document.getElementById("wipe1");
+  const soSlideshow = document.getElementById("soSlideshow");
   const slides1Root = document.getElementById("slides1");
   const slides1 =
     slides1Root instanceof HTMLElement ? Array.from(slides1Root.querySelectorAll(".slide")) : [];
+  const soSlide = slides1Root?.querySelector?.('.slide[data-slide="2"]') ?? null;
+  const soTrail = soSlide instanceof HTMLElement ? soSlide.querySelector(".soTrail") : null;
   const hint = document.getElementById("hint");
   const bethOverlay = document.getElementById("bethOverlay");
   const tbilisiLink = document.getElementById("tbilisiLink");
@@ -180,6 +183,23 @@ function main() {
   }
 
   applyMagazineCutouts();
+
+  // Build the "so" slideshow from local IMG_* files (Safari-friendly).
+  const soImages = ["IMG_1282.HEIC", "IMG_4846.JPG", "IMG_4901.HEIC"];
+  const soImgEls = [];
+  if (soSlideshow instanceof HTMLElement) {
+    for (const [i, name] of soImages.entries()) {
+      const img = document.createElement("img");
+      img.className = "soSlideImg";
+      img.alt = "";
+      img.loading = "eager";
+      img.decoding = "async";
+      img.src = `./${name}`;
+      img.style.setProperty("--r", `${(i % 2 === 0 ? -1 : 1) * (1.2 + i * 0.4)}deg`);
+      soSlideshow.appendChild(img);
+      soImgEls.push(img);
+    }
+  }
 
   const activation = {
     started: false,
@@ -517,12 +537,12 @@ function main() {
     video2PreRollDuringTransition: 0.08,
 
     // Scene 1 -> slides (wipe + slide timing)
-    wipeUpPx: 360,
-    slide1Px: 240,
-    slide2Px: 200,
-    slide3Px: 240,
-    slide4Px: 520,
-    slide5Px: 380,
+    wipeUpPx: 420,
+    slide1Px: 360,
+    slide2Px: 520,
+    slide3Px: 360,
+    slide4Px: 820,
+    slide5Px: 720,
 
     // Slides -> video2 transition
     fadeText1ToVideo2Px: 420,
@@ -749,7 +769,10 @@ function main() {
 
       const enterT = idx === 4 ? 0.22 : 0.18;
       const exitT = idx === 4 ? 0.0 : 0.18; // last slide shouldn't "leave" inside its segment
-      const enterRaw = easeOutBack(clamp01(p / enterT));
+      const isSoSlide = idx === 1;
+      const enterRaw = isSoSlide
+        ? easeOutCubic(clamp01(p / 0.24))
+        : easeOutBack(clamp01(p / enterT));
       const enterVis = clamp01(enterRaw);
       const exit =
         exitT <= 0 ? 0 : easeOutCubic(clamp01((p - (1 - exitT)) / Math.max(0.001, exitT)));
@@ -758,6 +781,7 @@ function main() {
       // Collage-like motion presets (each slide "cut" in differently).
       const presets = [
         { inX: -60, inY: 70, inRot: -5, inScale: 0.96, outX: 40, outY: -50, outRot: 4 },
+        // Slide 2 ("so") is handled below with a simple right-to-left motion.
         { inX: 80, inY: 10, inRot: 6, inScale: 0.92, outX: -60, outY: -30, outRot: -4 },
         { inX: -20, inY: 90, inRot: 2, inScale: 0.88, outX: 30, outY: -80, outRot: 2 },
         { inX: 70, inY: 50, inRot: 3, inScale: 0.94, outX: -40, outY: -40, outRot: -2 },
@@ -765,10 +789,18 @@ function main() {
       ];
       const pr = presets[idx] || presets[0];
 
-      const x = lerp(pr.inX, 0, enterRaw) + lerp(0, pr.outX, exit);
-      const y = lerp(pr.inY, 0, enterRaw) + lerp(0, pr.outY, exit);
-      const rot = lerp(pr.inRot, 0, enterRaw) + lerp(0, pr.outRot, exit);
-      const scale = lerp(pr.inScale, 1.0, enterRaw) * (1.0 + 0.04 * exit);
+      let x = lerp(pr.inX, 0, enterRaw) + lerp(0, pr.outX, exit);
+      let y = lerp(pr.inY, 0, enterRaw) + lerp(0, pr.outY, exit);
+      let rot = lerp(pr.inRot, 0, enterRaw) + lerp(0, pr.outRot, exit);
+      let scale = lerp(pr.inScale, 1.0, enterRaw) * (1.0 + 0.04 * exit);
+
+      if (isSoSlide) {
+        // Simple right-to-left motion (no rotation/overshoot/scale)
+        x = lerp(320, 0, enterRaw) + lerp(0, -140, exit);
+        y = 0;
+        rot = 0;
+        scale = 1;
+      }
 
       el.style.opacity = String(vis);
       el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(2)}px, ${y.toFixed(
@@ -836,12 +868,41 @@ function main() {
         wipe1.style.transform = "translateY(0%)";
       }
 
+      // Default slideshow off; only turned on during the "so" slide.
+      if (soSlideshow instanceof HTMLElement) {
+        setOpacity(soSlideshow, 0);
+      }
+
       // Determine which slide segment we're in
       hideAllSlides();
       if (y < yS1) {
         renderSlide(0, (y - yW) / Math.max(1, s.s1), 1);
       } else if (y < yS2) {
-        renderSlide(1, (y - yS1) / Math.max(1, s.s2), 1);
+        const p = (y - yS1) / Math.max(1, s.s2);
+        renderSlide(1, p, 1);
+
+        // Background slideshow + oOoOoO sweep synced to this slide.
+        const k = clamp01(p);
+        if (soSlideshow instanceof HTMLElement) {
+          setOpacity(soSlideshow, 0.55);
+        }
+        if (soImgEls.length > 0) {
+          const n = soImgEls.length;
+          // Advance through images as k increases; crossfade between neighbors.
+          const t = k * (n - 1);
+          const i0 = Math.max(0, Math.min(n - 1, Math.floor(t)));
+          const i1 = Math.max(0, Math.min(n - 1, i0 + 1));
+          const a = t - i0;
+          for (let i = 0; i < n; i++) soImgEls[i].style.opacity = "0";
+          soImgEls[i0].style.opacity = String(1 - a);
+          soImgEls[i1].style.opacity = String(a);
+        }
+        if (soTrail instanceof HTMLElement) {
+          // Move the trail from offscreen right to far left.
+          // Use vw so it feels consistent on mobile.
+          const xVw = lerp(55, -220, easeInOutCubic(k));
+          soTrail.style.transform = `translateX(${xVw.toFixed(2)}vw)`;
+        }
       } else if (y < yS3) {
         renderSlide(2, (y - yS2) / Math.max(1, s.s3), 1);
       } else if (y < yS4) {
@@ -858,6 +919,12 @@ function main() {
       const v2StartTime = state.dur2 * Math.max(0, cfg.video2PreRollDuringTransition);
 
       scrub1.seek(state.dur1);
+      if (soSlideshow instanceof HTMLElement) {
+        setOpacity(soSlideshow, 0);
+      }
+      if (soTrail instanceof HTMLElement) {
+        soTrail.style.transform = "translateX(0vw)";
+      }
 
       if (k < split) {
         const a = clamp01(k / split);
