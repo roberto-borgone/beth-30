@@ -708,6 +708,27 @@ body {
   transition: opacity 220ms ease;
 }
 
+.tbilisiDates {
+  display: block;
+  opacity: 0;
+  pointer-events: none;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.75),
+    0 2px 0 rgba(0, 0, 0, 0.7);
+  transition: opacity 220ms ease;
+}
+
+.messageInner--tarantino {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+}
+
 .tbilisiLink:visited {
   color: rgba(255, 255, 255, 0.92);
 }

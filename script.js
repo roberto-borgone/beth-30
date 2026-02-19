@@ -131,6 +131,7 @@ function main() {
   const hint = document.getElementById("hint");
   const bethOverlay = document.getElementById("bethOverlay");
   const tbilisiLink = document.getElementById("tbilisiLink");
+  const tbilisiDates = document.getElementById("tbilisiDates");
   const loadingOverlay = document.getElementById("loadingOverlay");
   const loadingText = document.getElementById("loadingText");
   const tapToEnable = document.getElementById("tapToEnable");
@@ -998,6 +999,10 @@ function main() {
       // Fade link in with the last title card, and only make it clickable when visible.
       setOpacity(tbilisiLink, m2Opacity);
       tbilisiLink.style.pointerEvents = m2Opacity > 0.6 ? "auto" : "none";
+    }
+
+    if (tbilisiDates instanceof HTMLElement) {
+      setOpacity(tbilisiDates, m2Opacity);
     }
   }
 
