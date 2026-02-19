@@ -23,6 +23,23 @@ function setOpacity(el, v) {
   el.style.opacity = String(Math.max(0, Math.min(1, v)));
 }
 
+function easeOutCubic(t) {
+  const x = clamp01(t);
+  return 1 - Math.pow(1 - x, 3);
+}
+
+function easeInOutCubic(t) {
+  const x = clamp01(t);
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
+
+function easeOutBack(t) {
+  const x = clamp01(t);
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+}
+
 function isMobileish() {
   return window.matchMedia?.("(max-width: 520px)")?.matches ?? true;
 }
@@ -104,6 +121,10 @@ function main() {
   const video2 = document.getElementById("video2");
   const message1 = document.getElementById("message1");
   const message2 = document.getElementById("message2");
+  const wipe1 = document.getElementById("wipe1");
+  const slides1Root = document.getElementById("slides1");
+  const slides1 =
+    slides1Root instanceof HTMLElement ? Array.from(slides1Root.querySelectorAll(".slide")) : [];
   const hint = document.getElementById("hint");
   const bethOverlay = document.getElementById("bethOverlay");
   const tbilisiLink = document.getElementById("tbilisiLink");
@@ -115,6 +136,50 @@ function main() {
   if (!(video1 instanceof HTMLVideoElement) || !(video2 instanceof HTMLVideoElement)) {
     return;
   }
+
+  function pseudoRand01(i) {
+    const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  function applyMagazineCutouts() {
+    const nodes = Array.from(document.querySelectorAll("[data-magcut='true']"));
+    for (const el of nodes) {
+      if (!(el instanceof HTMLElement)) continue;
+      if (el.dataset.magcutDone === "1") continue;
+      el.dataset.magcutDone = "1";
+
+      const text = (el.textContent || "").trim();
+      el.textContent = "";
+
+      const chars = Array.from(text);
+      chars.forEach((ch, idx) => {
+        if (ch === " ") {
+          const sp = document.createElement("span");
+          sp.className = "magSpace";
+          el.appendChild(sp);
+          return;
+        }
+        const s = document.createElement("span");
+        s.className = "magChar";
+        s.textContent = ch;
+
+        const r1 = pseudoRand01(idx + 1);
+        const r2 = pseudoRand01(idx + 11);
+        const r3 = pseudoRand01(idx + 111);
+        const rot = (r1 - 0.5) * 8; // deg
+        const x = (r2 - 0.5) * 6; // px
+        const y = (r3 - 0.5) * 6; // px
+        s.style.setProperty("--rot", `${rot.toFixed(2)}deg`);
+        s.style.setProperty("--x", `${x.toFixed(2)}px`);
+        s.style.setProperty("--y", `${y.toFixed(2)}px`);
+
+        el.appendChild(s);
+      });
+    }
+  }
+
+  applyMagazineCutouts();
 
   const activation = {
     started: false,
@@ -451,10 +516,18 @@ function main() {
     // a small fraction of video2 so it starts fading in immediately.
     video2PreRollDuringTransition: 0.08,
 
+    // Scene 1 -> slides (wipe + slide timing)
+    wipeUpPx: 360,
+    slide1Px: 240,
+    slide2Px: 200,
+    slide3Px: 240,
+    slide4Px: 520,
+    slide5Px: 380,
+
+    // Slides -> video2 transition
+    fadeText1ToVideo2Px: 420,
+
     // Transition segment sizes in px (visual beats).
-    fadeVideo1ToText1Px: 300,
-    holdText1Px: 800,
-    fadeText1ToVideo2Px: 320,
     fadeVideo2ToText2Px: 320,
     holdEndPx: 700,
 
@@ -475,8 +548,12 @@ function main() {
 
     const a = {
       seg1,
-      fade1: cfg.fadeVideo1ToText1Px,
-      hold1: cfg.holdText1Px,
+      wipe: cfg.wipeUpPx,
+      s1: cfg.slide1Px,
+      s2: cfg.slide2Px,
+      s3: cfg.slide3Px,
+      s4: cfg.slide4Px,
+      s5: cfg.slide5Px,
       fadeTo2: cfg.fadeText1ToVideo2Px,
       seg2,
       fade2: cfg.fadeVideo2ToText2Px,
@@ -484,7 +561,17 @@ function main() {
     };
 
     const total =
-      a.seg1 + a.fade1 + a.hold1 + a.fadeTo2 + a.seg2 + a.fade2 + a.holdEnd;
+      a.seg1 +
+      a.wipe +
+      a.s1 +
+      a.s2 +
+      a.s3 +
+      a.s4 +
+      a.s5 +
+      a.fadeTo2 +
+      a.seg2 +
+      a.fade2 +
+      a.holdEnd;
 
     return { ...a, total };
   }
@@ -602,11 +689,12 @@ function main() {
   window.addEventListener("pointerup", stopInteracting);
   window.addEventListener("pointercancel", stopInteracting);
 
+  let y = 0;
   let lastY = -1;
   function update() {
     ticking = false;
 
-    const y = Math.max(0, window.scrollY || 0);
+    y = Math.max(0, window.scrollY || 0);
     lastY = y;
 
     // Don't run the scrub timeline until the user has tapped "Tap to start".
@@ -637,12 +725,56 @@ function main() {
     const s = segments;
     const y0 = 0;
     const y1 = y0 + s.seg1;
-    const y2 = y1 + s.fade1;
-    const y3 = y2 + s.hold1;
-    const y4 = y3 + s.fadeTo2;
+    const yW = y1 + s.wipe;
+    const yS1 = yW + s.s1;
+    const yS2 = yS1 + s.s2;
+    const yS3 = yS2 + s.s3;
+    const yS4 = yS3 + s.s4;
+    const yS5 = yS4 + s.s5;
+    const y4 = yS5 + s.fadeTo2;
     const y5 = y4 + s.seg2;
     const y6 = y5 + s.fade2;
     // y6..end hold
+
+    function hideAllSlides() {
+      for (const el of slides1) {
+        el.style.opacity = "0";
+        el.style.transform = "translate(-50%, -50%)";
+      }
+    }
+
+    function renderSlide(idx, p, globalOpacity = 1) {
+      const el = slides1[idx];
+      if (!el) return;
+
+      const enterT = idx === 4 ? 0.22 : 0.18;
+      const exitT = idx === 4 ? 0.0 : 0.18; // last slide shouldn't "leave" inside its segment
+      const enterRaw = easeOutBack(clamp01(p / enterT));
+      const enterVis = clamp01(enterRaw);
+      const exit =
+        exitT <= 0 ? 0 : easeOutCubic(clamp01((p - (1 - exitT)) / Math.max(0.001, exitT)));
+      const vis = clamp01(Math.min(enterVis, 1 - exit)) * globalOpacity;
+
+      // Collage-like motion presets (each slide "cut" in differently).
+      const presets = [
+        { inX: -60, inY: 70, inRot: -5, inScale: 0.96, outX: 40, outY: -50, outRot: 4 },
+        { inX: 80, inY: 10, inRot: 6, inScale: 0.92, outX: -60, outY: -30, outRot: -4 },
+        { inX: -20, inY: 90, inRot: 2, inScale: 0.88, outX: 30, outY: -80, outRot: 2 },
+        { inX: 70, inY: 50, inRot: 3, inScale: 0.94, outX: -40, outY: -40, outRot: -2 },
+        { inX: -70, inY: 110, inRot: -3, inScale: 0.9, outX: 50, outY: -70, outRot: 3 },
+      ];
+      const pr = presets[idx] || presets[0];
+
+      const x = lerp(pr.inX, 0, enterRaw) + lerp(0, pr.outX, exit);
+      const y = lerp(pr.inY, 0, enterRaw) + lerp(0, pr.outY, exit);
+      const rot = lerp(pr.inRot, 0, enterRaw) + lerp(0, pr.outRot, exit);
+      const scale = lerp(pr.inScale, 1.0, enterRaw) * (1.0 + 0.04 * exit);
+
+      el.style.opacity = String(vis);
+      el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(2)}px, ${y.toFixed(
+        2,
+      )}px) rotate(${rot.toFixed(2)}deg) scale(${scale.toFixed(4)})`;
+    }
 
     // Defaults
     let v1Opacity = 0;
@@ -656,6 +788,11 @@ function main() {
       v2Opacity = 0;
       m1Opacity = 0;
       m2Opacity = 0;
+      if (wipe1 instanceof HTMLElement) {
+        wipe1.style.opacity = "0";
+        wipe1.style.transform = "translateY(100%)";
+      }
+      hideAllSlides();
 
       const t = (y - y0) / Math.max(1, s.seg1);
       const u = clamp01(t);
@@ -669,54 +806,100 @@ function main() {
       const time = lerp(0, state.dur1, curvedU);
       scrub1.seek(time);
       scrub2.seek(0);
-    } else if (y < y2) {
-      // Dissolve video1 -> message1
-      const t = (y - y1) / Math.max(1, s.fade1);
-      const k = clamp01(t);
-      v1Opacity = 1 - k;
-      m1Opacity = k;
-
-      scrub1.seek(state.dur1);
-      scrub2.seek(0);
-    } else if (y < y3) {
-      // Hold message1
-      v1Opacity = 0;
+    } else if (y < yW) {
+      // Wipe up from bottom to top to introduce the first slide
+      v1Opacity = 1;
+      v2Opacity = 0;
       m1Opacity = 1;
+      m2Opacity = 0;
+      hideAllSlides();
       scrub1.seek(state.dur1);
       scrub2.seek(0);
+
+      const t = (y - y1) / Math.max(1, s.wipe);
+      const k = easeInOutCubic(t);
+      if (wipe1 instanceof HTMLElement) {
+        wipe1.style.opacity = "1";
+        wipe1.style.transform = `translateY(${((1 - k) * 100).toFixed(3)}%)`;
+      }
+    } else if (y < yS5) {
+      // Slides on top of black wipe
+      v1Opacity = 0;
+      v2Opacity = 0;
+      m1Opacity = 1;
+      m2Opacity = 0;
+      scrub1.seek(state.dur1);
+      scrub2.seek(0);
+
+      if (wipe1 instanceof HTMLElement) {
+        wipe1.style.opacity = "1";
+        wipe1.style.transform = "translateY(0%)";
+      }
+
+      // Determine which slide segment we're in
+      hideAllSlides();
+      if (y < yS1) {
+        renderSlide(0, (y - yW) / Math.max(1, s.s1), 1);
+      } else if (y < yS2) {
+        renderSlide(1, (y - yS1) / Math.max(1, s.s2), 1);
+      } else if (y < yS3) {
+        renderSlide(2, (y - yS2) / Math.max(1, s.s3), 1);
+      } else if (y < yS4) {
+        renderSlide(3, (y - yS3) / Math.max(1, s.s4), 1);
+      } else {
+        renderSlide(4, (y - yS4) / Math.max(1, s.s5), 1);
+      }
     } else if (y < y4) {
-      // Fade OUT message1, then fade IN video2 (avoid a black gap)
-      const t = (y - y3) / Math.max(1, s.fadeTo2);
+      // Fade OUT slides/wipe, then fade IN video2
+      const t = (y - yS5) / Math.max(1, s.fadeTo2);
       const k = clamp01(t);
-      const split = 0.62; // % of transition spent fading OUT the text
+      const split = 0.55;
       const fullAt = Math.max(0.05, Math.min(0.95, cfg.video2FullOpacityAt));
       const v2StartTime = state.dur2 * Math.max(0, cfg.video2PreRollDuringTransition);
 
+      scrub1.seek(state.dur1);
+
       if (k < split) {
-        // Phase A: fade out message only
         const a = clamp01(k / split);
-        m1Opacity = 1 - a;
+        v1Opacity = 0;
         v2Opacity = 0;
+        m1Opacity = 1;
+        m2Opacity = 0;
         scrub2.seek(0);
+
+        if (wipe1 instanceof HTMLElement) {
+          wipe1.style.opacity = "1";
+          wipe1.style.transform = "translateY(0%)";
+        }
+        hideAllSlides();
+        // Keep the last slide in a stable pose while it fades out (no jump/glitch)
+        renderSlide(4, 0.92, 1 - a);
       } else {
-        // Phase B: fade in video only
         const b = clamp01((k - split) / (1 - split));
-        m1Opacity = 0;
+        v1Opacity = 0;
+        m2Opacity = 0;
 
-        // Pre-roll a bit and END the transition exactly at v2StartTime,
-        // so Scene 2 can continue from the same time (no "fade in -> black -> fade in").
+        // Fade out the black wipe layer as video2 comes in underneath.
+        m1Opacity = 1 - b;
+        if (wipe1 instanceof HTMLElement) {
+          wipe1.style.opacity = "1";
+          wipe1.style.transform = "translateY(0%)";
+        }
+        hideAllSlides();
+
         const time = lerp(0, v2StartTime, b);
-
-        // Opacity follows your "full opacity at 3/4 playback" rule,
-        // but ramped in during this phase.
         const base = clamp01(time / (state.dur2 * fullAt));
-        v2Opacity = Math.max(0.02, base) * b;
+        v2Opacity = base * b;
         scrub2.seek(time);
       }
     } else if (y < y5) {
       // Scene 2: scrub video2
       m1Opacity = 0;
       m2Opacity = 0;
+      if (wipe1 instanceof HTMLElement) {
+        wipe1.style.opacity = "0";
+      }
+      hideAllSlides();
 
       const t = (y - y4) / Math.max(1, s.seg2);
       const v2StartTime = state.dur2 * Math.max(0, cfg.video2PreRollDuringTransition);
